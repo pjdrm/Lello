@@ -189,7 +189,7 @@ def parse_message(**payload):
         # TODO: admin command to remove people
 
 if __name__ == "__main__":
-    slack_token = os.environ["SLACK_API_TOKEN"] #'xoxb-1126413540823-1165973693248-uelSBGZpl9ki4ruimcZOpEwm'
+    slack_token = os.environ["SLACK_API_TOKEN"]
     read_group_chan = 'bot'
     lello_bot = LelloBot(slack_token, read_group_chan)
     rtm_client = RTMClient(
