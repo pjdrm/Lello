@@ -5,23 +5,24 @@ from slack import RTMClient
 from slack import WebClient
 from slack.errors import SlackApiError
 
+MAX_CHARS = 50
 PRESENTER_EMOJI = 'sign_up'
 LOTTERY_EMOJI = 'game_die'
 CMD_PREFIX = '!'
 VALID_CMD_EMOJI = '+1'
 LOTTERY_DRAW_EMOJI = 'slot_machine'
+WELCOME_MSG = "We are looking for volunteers to present at the next *Unbabel arXiv reading group*!\n"\
+              "Use the following reactions to sign up:"
+PRESENTERS_MSG = "\t:"+PRESENTER_EMOJI+": to present a paper."
+LOTTERY_MSG = "\t:"+LOTTERY_EMOJI+": to be a backup presenter."
+HEADER_MSG = '\n'.join([WELCOME_MSG, PRESENTERS_MSG, LOTTERY_MSG])
 
 MSG_TEMPLATE = [
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": "Unbabel arXiv reading group *sign up*\n"+"*Presenters* :"+PRESENTER_EMOJI+":\n\n"+"*Lottery Pool* :"+LOTTERY_EMOJI+":\n\n*Papers:*"
-            },
-            "accessory": {
-                "type": "image",
-                "image_url": "https://images.trustinnews.pt/uploads/sites/6/2020/01/110612550.jpg",
-                "alt_text": "computer thumbnail"
+                "text": HEADER_MSG
             }
         }
     ]
@@ -100,24 +101,22 @@ class LelloBot:
         # TODO: Better announcement format if no presenters/lottery sign ups
         update_msg = copy.deepcopy(MSG_TEMPLATE)
         presenters = []
-        paper_list = []
         for presenter in self.presenters:
             if presenter in self.papers:
-                paper_list.append(self.papers[presenter]['title'])
-                presenter = '<'+self.papers[presenter]['url']+'|'+presenter+'>'
-
+                presenter = presenter+' - <'+self.papers[presenter]['url']+'|'+self.papers[presenter]['title']+'>'
             presenters.append(presenter)
 
-        presenters_str = '\n'.join(['\t• '+p for p in presenters])
-        lottery_str = '\n'.join(['\t• '+l for l in self.lottery])
-        if len(paper_list) > 0:
-            papers_str = '\n'.join(['\t• '+p for p in paper_list])
-        else:
-            papers_str = ''
-        update_msg[0]['text']['text'] = "Unbabel arXiv reading group *sign up*\n"+\
-                                        "*Presenters* :"+PRESENTER_EMOJI+":\n"+presenters_str+"\n\n"+\
-                                        "*Lottery Pool* :"+LOTTERY_EMOJI+":\n"+lottery_str+"\n\n"+\
-                                        "*Papers:*\n"+papers_str
+        presenters_str = ''
+        lottery_str = ''
+        if len(self.presenters) > 0:
+            presenters_str = "*Presenters*"+"\n"+'\n'.join(['\t• ' + p for p in presenters])
+
+        if len(self.lottery) > 0:
+            lottery_str = "*Backups*"+"\n"+'\n'.join(['\t• ' + l for l in self.lottery])
+
+        update_msg[0]['text']['text'] = HEADER_MSG+"\n"+\
+                                        presenters_str+"\n\n"+\
+                                        lottery_str+"\n"
         response = lello_bot.web_client.chat_update(
             channel=chan_id,
             ts=self.announce_msg_ts,
@@ -134,6 +133,8 @@ class LelloBot:
                 self.presenters.append(user_real_name)
                 if user_real_name in self.lottery:
                     self.lottery.remove(user_real_name)
+        if len(paper_title) > MAX_CHARS:
+            paper_title = paper_title[:MAX_CHARS]+'...'
 
         self.papers[user_real_name] = {'title': paper_title, 'url': paper_url}
         self.update_announcement(chan_id)
@@ -166,7 +167,10 @@ def parse_message(**payload):
             if '\xa0' in text_split[-1]:
                 # Seems slack tries to detect URLs and does not send the plain text
                 text_split = text_split[-1].split('\xa0')[1:]
-                paper_url = text_split[0][:-1].split('|')[1]
+                if '|' not in text_split[0]:
+                    paper_url = text_split[0].replace('<', '').replace('>', '')
+                else:
+                    paper_url = text_split[0][:-1].split('|')[1]
             else:
                 # In case slack misses that this is a URL
                 text_split = text_split[-1].split(' ')
